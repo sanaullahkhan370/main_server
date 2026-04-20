@@ -1,9 +1,9 @@
 const Bus = require("../models/Bus");
 
-// 🔥 distance function
+// 📏 Distance (Haversine)
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
-  const toRad = (x) => x * Math.PI / 180;
+  const toRad = (x) => (x * Math.PI) / 180;
 
   const φ1 = toRad(lat1);
   const φ2 = toRad(lat2);
@@ -12,7 +12,8 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
   const a =
     Math.sin(Δφ / 2) ** 2 +
-    Math.cos(φ1) * Math.cos(φ2) *
+    Math.cos(φ1) *
+    Math.cos(φ2) *
     Math.sin(Δλ / 2) ** 2;
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -20,25 +21,27 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// ✅ update location with speed + driver info
+// 🚍 UPDATE LOCATION
 const updateLocation = async (req, res) => {
   try {
     const { busId, lat, lng, driverName, phoneNumber } = req.body;
 
     console.log("📥 Incoming:", req.body);
 
-    // ✅ validation
+    // ✅ VALIDATION
     if (!busId || lat == null || lng == null) {
       return res.status(400).json({
         success: false,
-        message: "Missing data"
+        message: "Missing data",
       });
     }
 
+    // 🔍 OLD RECORD (flat structure)
     const oldBus = await Bus.findOne({ busId });
 
     let speed = 0;
 
+    // 🚀 SPEED CALCULATION (flat fields)
     if (
       oldBus &&
       oldBus.latitude != null &&
@@ -48,44 +51,51 @@ const updateLocation = async (req, res) => {
       const distance = getDistance(
         oldBus.latitude,
         oldBus.longitude,
-        lat,
-        lng
+        Number(lat),
+        Number(lng)
       );
 
       const timeDiff = (new Date() - oldBus.updatedAt) / 1000;
 
-      // 🔥 ignore too fast updates (noise filter)
       if (timeDiff > 2) {
         speed = (distance / timeDiff) * 3.6;
       }
 
-      // 🔥 filters
       if (speed < 1) speed = 0;
       if (speed > 120) speed = 0;
     }
 
     const currentTime = new Date();
 
+    // 💾 SAVE / UPDATE (flat fields)
     const bus = await Bus.findOneAndUpdate(
       { busId },
       {
-        latitude: lat,
-        longitude: lng,
+        latitude: Number(lat),
+        longitude: Number(lng),
         speed,
-        driverName: driverName || oldBus?.driverName || "",   // ✅ add
-        phoneNumber: phoneNumber || oldBus?.phoneNumber || "", // ✅ add
-        updatedAt: currentTime
+
+        driverName: driverName
+          ? driverName.trim()
+          : oldBus?.driverName || "",
+
+        phoneNumber: phoneNumber
+          ? phoneNumber.trim()
+          : oldBus?.phoneNumber || "",
+
+        updatedAt: currentTime,
       },
       {
         returnDocument: "after",
-        upsert: true
+        upsert: true,
       }
     );
 
-    res.json({
+    // ✅ RESPONSE
+    res.status(200).json({
       success: true,
-      message: "Location updated",
-      data: bus
+      message: "Location updated successfully",
+      data: bus,
     });
 
   } catch (err) {
@@ -93,11 +103,11 @@ const updateLocation = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Server error"
+      message: "Server error",
     });
   }
 };
 
 module.exports = {
-  updateLocation
+  updateLocation,
 };
